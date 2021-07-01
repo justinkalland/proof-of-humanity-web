@@ -18,10 +18,12 @@ import {
 } from "@kleros/components";
 import { useField } from "formik";
 import { useRouter } from "next/router";
-import { memo, useCallback, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 
 import { useEvidenceFile } from "data";
 import getVideoEmptyBorderSize from "lib/get-video-empty-border-size";
+import UBIAbi from "subgraph/abis/ubi";
+import { UBIAddress } from "subgraph/config";
 
 const VIDEO_OPTIONS = {
   types: {
@@ -93,6 +95,12 @@ const SubmitProfileForm = memo(
 
     const { upload, uploadWithProgress } = useArchon();
     const { send } = useContract("proofOfHumanityGovernorProxy", "addHumans");
+
+    // For start accruing UBI
+    const ubiInstance = useMemo(() => {
+      if (!UBIAbi || !UBIAddress) return;
+      return new web3.eth.Contract(UBIAbi, UBIAddress);
+    }, [web3.eth.Contract]);
 
     const metaEvidence = useEvidenceFile()(registrationMetaEvidence.URI);
 
@@ -266,6 +274,11 @@ const SubmitProfileForm = memo(
             setWaitingForTransaction(true);
             pageScroll();
             const result = await send([account], [evidence], [name]);
+
+            // Start accruing KUBI
+            await ubiInstance.methods
+              .startAccruing(account)
+              .send({ from: account });
 
             onSend?.();
 
