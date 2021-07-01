@@ -66,6 +66,37 @@ const contracts = [
     address: { [network]: address },
   },
   {
+    name: "proofOfHumanityGovernorProxy",
+    abi: [
+      {
+        constant: false,
+        inputs: [
+          {
+            internalType: "address[]",
+            name: "_submissionIDs",
+            type: "address[]",
+          },
+          {
+            internalType: "string[]",
+            name: "_evidence",
+            type: "string[]",
+          },
+          {
+            internalType: "string[]",
+            name: "_names",
+            type: "string[]",
+          },
+        ],
+        name: "addHumans",
+        outputs: [],
+        payable: false,
+        stateMutability: "nonpayable",
+        type: "function",
+      },
+    ],
+    address: { kovan: "0xF5FcFD161C1a5036a4a9Dec9060FD5f769061De7" },
+  },
+  {
     name: "klerosLiquid",
     abi: KlerosLiquid,
     address: { [network]: klerosLiquidAddress },
