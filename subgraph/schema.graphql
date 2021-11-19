@@ -187,10 +187,6 @@ type Submission @entity {
   """
   requestsLength: BigInt!
   """
-  True if vouch was not processed and vouchee is resolved.
-  """
-  vouchReleaseReady: Boolean!
-  """
   True if this submission was part of the seeding event.
   """
   seeded: Boolean!
@@ -217,6 +213,10 @@ type Request @entity {
   The request's ID, keccak256(submissionID, submissionRequestsLength).
   """
   id: ID!
+  """
+  The request index.
+  """
+  requestIndex: BigInt!
   """
   True if a dispute was raised. Note that the request can enter disputed state multiple times, once per reason.
   """
@@ -290,9 +290,9 @@ type Request @entity {
   """
   challenges: [Challenge!]! @derivedFrom(field: "request")
   """
-  The request's number of challenges.
+  The ID of the last challenge, which is equal to the total number of challenges for the request
   """
-  challengesLength: BigInt!
+  lastChallengeID: BigInt!
   """
   The request type
   """
@@ -301,6 +301,10 @@ type Request @entity {
   The time the request was resolved.
   """
   resolutionTime: BigInt!
+  """
+  True if vouch was not processed and vouchee is resolved.
+  """
+  vouchReleaseReady: Boolean!
 }
 
 type Evidence @entity {
@@ -336,7 +340,7 @@ type Challenge @entity {
   """
   request: Request!
   """
-  The challenge's ID, keccak256(requestID, "Challenge-" + requestChallengesLength).
+  The challenge's ID, keccak256(requestID, "Challenge-" + challengeIndex).
   """
   id: ID!
   """
@@ -372,9 +376,9 @@ type Challenge @entity {
   """
   roundIDs: [String!]!
   """
-  The challenge's number of rounds.
+  The ID of the last round.
   """
-  roundsLength: BigInt!
+  lastRoundID: BigInt!
   """
   In-contract challenge ID
   """
@@ -395,7 +399,7 @@ type Round @entity {
   """
   challenge: Challenge!
   """
-  The round's ID, keccak256(challengeID, challengeRoundsLength).
+  The round's ID, keccak256(challengeID, roundIndex).
   """
   id: ID!
   """

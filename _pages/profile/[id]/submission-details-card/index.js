@@ -70,15 +70,19 @@ const submissionDetailsCardFragments = {
         evidence(orderBy: creationTime, first: 1) {
           URI
         }
+        vouches {
+          id
+          submissionTime
+        }
       }
       latestRequest: requests(
         orderBy: creationTime
         orderDirection: desc
         first: 1
       ) {
-        challenges {
+        challenges(orderBy: creationTime) {
           disputeID
-          roundsLength
+          lastRoundID
           reason
           duplicateSubmission {
             id
@@ -143,11 +147,14 @@ export default function SubmissionDetailsCard({
 
   const status = submissionStatusEnum.parse({ ...rest, submissionDuration });
   const { challenges } = latestRequest || {};
+  const activeChallenges = challenges.filter(
+    ({ disputeID }) => disputeID !== null
+  );
 
   // Note that there is a challenge object with first round data even if there
   // is no challenge.
   const challenge = (challenges && challenges[0]) || {};
-  const { rounds, roundsLength } = challenge || {};
+  const { rounds, lastRoundID } = challenge || {};
   const round = (rounds && rounds[0]) || {};
   const { hasPaid } = round || {};
 
@@ -192,14 +199,6 @@ export default function SubmissionDetailsCard({
     [contributions, web3.utils]
   );
 
-  const registeredGraphVouchers = useFragment(
-    submissionDetailsCardFragments.vouchers,
-    vouchers
-  ).filter(
-    ({ submissionTime }) =>
-      Date.now() / 1000 - submissionTime < submissionDuration
-  );
-
   const [offChainVouches, setOffChainVouches] = useState([]);
   useEffect(() => {
     if (!id) return;
@@ -214,19 +213,39 @@ export default function SubmissionDetailsCard({
     })();
   }, [id]);
 
-  const registeredVouchers = useMemo(() => {
-    const vouchersSet = new Set();
-    offChainVouches.forEach((v) => vouchersSet.add(v));
-    registeredGraphVouchers.forEach((v) => vouchersSet.add(v.id));
-    return [...vouchersSet];
-  }, [offChainVouches, registeredGraphVouchers]);
+  const registeredGraphVouchers = useFragment(
+    submissionDetailsCardFragments.vouchers,
+    vouchers
+  ).filter(
+    ({ submissionTime }) =>
+      Date.now() / 1000 - submissionTime < submissionDuration
+  );
+
+  const currentGraphVouchers = request.vouches.filter(
+    ({ submissionTime }) =>
+      Date.now() / 1000 - submissionTime < submissionDuration
+  );
+
+  const [registeredVouchers, currentVouchers] = useMemo(() => {
+    const completeSet = new Set();
+    const onlyCurrentSet = new Set();
+
+    offChainVouches.forEach((v) => {
+      completeSet.add(v);
+      onlyCurrentSet.add(v);
+    });
+    registeredGraphVouchers.forEach((v) => completeSet.add(v.id));
+    currentGraphVouchers.forEach((v) => onlyCurrentSet.add(v.id));
+
+    return [[...completeSet], [...onlyCurrentSet]];
+  }, [offChainVouches, registeredGraphVouchers, currentGraphVouchers]);
 
   const shareTitle =
     status === submissionStatusEnum.Vouching
       ? "Register and vouch for this profile on Proof Of Humanity."
       : "Check out this profile on Proof Of Humanity.";
 
-  const firstRoundFullyFunded = Number(roundsLength) === 1 && hasPaid[0];
+  const firstRoundFullyFunded = Number(lastRoundID) === 0 && hasPaid[0];
 
   return (
     <Card
@@ -274,9 +293,8 @@ export default function SubmissionDetailsCard({
         <Box sx={{ marginY: 2, width: "100%" }}>
           {status === submissionStatusEnum.Vouching && (
             <>
-              {((totalCost?.gt(totalContribution) &&
-                Number(roundsLength) > 1) ||
-                (Number(roundsLength) === 1 && !hasPaid[0])) && (
+              {((totalCost?.gt(totalContribution) && Number(lastRoundID) > 0) ||
+                (Number(lastRoundID) === 0 && !hasPaid[0])) && (
                 <FundButton
                   totalCost={totalCost}
                   totalContribution={totalContribution}
@@ -302,7 +320,7 @@ export default function SubmissionDetailsCard({
           >
             <Text>Vouchers</Text>
             <Text sx={{ fontWeight: "bold", paddingX: 1 }}>
-              {String(registeredVouchers.length)}/{requiredNumberOfVouches}
+              {String(currentVouchers.length)}/{requiredNumberOfVouches}
             </Text>
           </Box>
           {status !== submissionStatusEnum.Registered && (
@@ -339,33 +357,36 @@ export default function SubmissionDetailsCard({
             }}
           >
             <Text sx={{ fontWeight: "bold" }}>
-              {`Dispute${challenges?.length > 1 ? "s" : ""}:`}
+              {`Dispute${activeChallenges?.length > 1 ? "s" : ""}:`}
             </Text>
-            {challenges.map(({ disputeID, reason, duplicateSubmission }, i) => (
-              <Flex
-                key={i}
-                sx={{
-                  flexDirection: "row",
-                }}
-              >
-                <Link
-                  newTab
-                  href={`https://resolve.kleros.io/cases/${disputeID}`}
-                  sx={{ marginLeft: 1 }}
+            {activeChallenges.map(
+              ({ disputeID, reason, duplicateSubmission }, i) => (
+                <Flex
+                  key={i}
+                  sx={{
+                    flexDirection: "row",
+                  }}
                 >
-                  #{disputeID}{" "}
-                  {challengeReasonEnum.parse(reason).startCase !== "None"
-                    ? challengeReasonEnum.parse(reason).startCase
-                    : null}
-                  {challengeReasonEnum.parse(reason).startCase === "Duplicate"
-                    ? " of-"
-                    : null}
-                </Link>
-                {challengeReasonEnum.parse(reason).startCase === "Duplicate" ? (
-                  <SmallAvatar submissionId={duplicateSubmission.id} />
-                ) : null}
-              </Flex>
-            ))}
+                  <Link
+                    newTab
+                    href={`https://resolve.kleros.io/cases/${disputeID}`}
+                    sx={{ marginLeft: 1 }}
+                  >
+                    #{disputeID}{" "}
+                    {challengeReasonEnum.parse(reason).startCase !== "None"
+                      ? challengeReasonEnum.parse(reason).startCase
+                      : null}
+                    {challengeReasonEnum.parse(reason).startCase === "Duplicate"
+                      ? " of-"
+                      : null}
+                  </Link>
+                  {challengeReasonEnum.parse(reason).startCase ===
+                  "Duplicate" ? (
+                    <SmallAvatar submissionId={duplicateSubmission.id} />
+                  ) : null}
+                </Flex>
+              )
+            )}
           </Flex>
         )}
         <Box sx={{ marginTop: "auto" }}>
@@ -406,19 +427,17 @@ export default function SubmissionDetailsCard({
           registeredVouchers={registeredVouchers}
           firstRoundFullyFunded={firstRoundFullyFunded}
         />
-        {(status === submissionStatusEnum.Vouching ||
-          status === submissionStatusEnum.PendingRegistration) && (
+        {status === submissionStatusEnum.Vouching && (
           <Alert
             type="muted"
             title="Something wrong with this submission?"
             sx={{ mt: 3, wordWrap: "break-word" }}
           >
             <Text>
-              There is still time to save this submitter&apos;s deposit! Try
-              contacting them via{" "}
-              <Link href="https://ethmail.cc/">ethmail.cc</Link>. This is as
-              simple as sending an email to [eth-address]@ethmail.cc. Example:{" "}
-              {id}@ethmail.cc
+              There is still time to save this submitter&apos;s deposit! Send
+              them an email to{" "}
+              <Link href={`mailto:${id}@ethmail.cc`}>{id}@ethmail.cc</Link>. It
+              may save the submitter&apos;s deposit!
             </Text>
           </Alert>
         )}

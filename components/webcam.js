@@ -4,28 +4,34 @@ import ReactLoadingSkeleton from "react-loading-skeleton";
 import ReactWebcam from "react-webcam";
 import { Box, Flex } from "theme-ui";
 
+import Alert from "./alert";
 import Button from "./button";
-import Image from "./image";
 import Popup from "./popup";
-import Video from "./video";
+import Text from "./text";
 
 export default function Webcam({
-  trigger,
   sx,
-  videoConstraints = { height: 360, width: 360 },
+  videoConstraints = { height: 480, width: 480 },
   mirrored = true,
   photo = true,
   onChange,
   video = true,
+  open = false,
+  setPopupOpen,
   ...rest
 }) {
   const [file, setFile] = useState();
   const [loading, setLoading] = useState(true);
   const [recording, setRecording] = useState(false);
+  const [_mirrored, _setMirrored] = useState(mirrored);
 
   const ref = useRef();
   const mediaRecorderRef = useRef();
   const recordedChunksRef = useRef([]);
+
+  const popupWidth = "65vh";
+  const popupMaxHeight = "85vh";
+  const popupMinHeight = "65vh";
 
   useEffect(
     () => () => {
@@ -33,44 +39,69 @@ export default function Webcam({
     },
     [file]
   );
+
   return (
     <Popup
       contentStyle={{ width: undefined }}
-      trigger={trigger}
       modal
       onClose={() => setLoading(true)}
+      open={open}
+      closeOnDocumentClick={false}
     >
       <Box
         sx={{
           video: {
-            height: "80vh",
-            marginBottom: -1,
-            width: "80vh",
+            height: popupWidth,
+            marginBottom: -4,
+            width: popupWidth,
           },
+          display: "flex",
+          flexDirection: "column",
+          minHeight: popupMinHeight,
+          maxHeight: popupMaxHeight,
+          minWidth: popupWidth,
           ...sx,
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          event.preventDefault();
         }}
       >
         <ReactWebcam
           ref={ref}
-          mirrored={mirrored}
+          mirrored={_mirrored}
           videoConstraints={videoConstraints}
           onCanPlayThrough={() => setLoading(false)}
           {...rest}
+          onClick={(event) => event.preventDefault()}
         />
         <Flex
           sx={{
             bottom: 2,
             justifyContent: "space-evenly",
             left: 0,
-            position: "absolute",
             width: "100%",
+            mt: 1,
           }}
+          onClick={(event) => event.preventDefault()}
         >
+          <Button
+            preventDefault
+            onClick={(event) => {
+              event.preventDefault();
+              _setMirrored(!_mirrored);
+            }}
+            disabled={recording}
+          >
+            Mirror
+          </Button>
           {photo && (
             <Button
-              onClick={() =>
+              preventDefault
+              onClick={(event) => {
+                event.preventDefault();
                 ref.current.getCanvas().toBlob(async (blob) => {
-                  const _file = new File([blob], "capture", {
+                  const _file = new File([blob], "capture.png", {
                     type: blob.type,
                   });
                   const buffer = await _file.arrayBuffer();
@@ -78,25 +109,34 @@ export default function Webcam({
                   _file.content = buffer;
                   setFile(_file);
                   if (onChange) onChange(_file);
-                })
-              }
+                });
+                setPopupOpen(false);
+              }}
             >
               <Camera sx={{ marginRight: 1 }} /> Capture
             </Button>
           )}
           {video &&
             (recording ? (
-              <Button onClick={() => mediaRecorderRef.current.stop()}>
+              <Button
+                preventDefault
+                onClick={(event) => {
+                  event.preventDefault();
+                  mediaRecorderRef.current.stop();
+                  setPopupOpen(false);
+                }}
+              >
                 <Stop sx={{ marginRight: 1 }} /> Stop
               </Button>
             ) : (
               <Button
-                onClick={() => {
+                onClick={(event) => {
+                  event.preventDefault();
                   setRecording(true);
                   ref.current.recording = true;
 
                   ref.current.getCanvas();
-                  if (mirrored) {
+                  if (_mirrored) {
                     ref.current.ctx.translate(ref.current.canvas.width, 0);
                     ref.current.ctx.scale(-1, 1);
                     ref.current.mirrored = true;
@@ -136,9 +176,9 @@ export default function Webcam({
                     async () => {
                       const _file = new File(
                         recordedChunksRef.current,
-                        "video",
+                        "video.webm",
                         {
-                          type: recordedChunksRef.current[0].type,
+                          type: "video/webm",
                         }
                       );
                       const buffer = await _file.arrayBuffer();
@@ -147,14 +187,14 @@ export default function Webcam({
                       setFile(_file);
                       if (onChange) onChange(_file);
 
-                      if (ref.current.mirrored) {
+                      if (ref.current?.mirrored) {
                         ref.current.ctx.translate(-ref.current.canvas.width, 0);
                         ref.current.ctx.scale(-1, 1);
                         ref.current.mirrored = false;
                       }
 
                       recordedChunksRef.current = [];
-                      ref.current.recording = false;
+                      if (ref.current) ref.current.recording = false;
                       setRecording(false);
                     }
                   );
@@ -164,30 +204,40 @@ export default function Webcam({
                 <VideoIcon sx={{ marginRight: 1 }} /> Record
               </Button>
             ))}
+          <Button
+            preventDefault
+            onClick={(event) => {
+              event.persist();
+              event.preventDefault();
+              setPopupOpen(false);
+            }}
+            disabled={recording}
+          >
+            Close
+          </Button>
         </Flex>
-        {file &&
-          !recording &&
-          (file.type.startsWith("video") ? (
-            <Video
-              variant="thumbnail"
-              sx={{
-                position: "absolute",
-                right: 1,
-                top: 1,
-              }}
-              url={file.preview}
-            />
-          ) : (
-            <Image
-              variant="thumbnail"
-              sx={{
-                position: "absolute",
-                right: 1,
-                top: 1,
-              }}
-              src={file.preview}
-            />
-          ))}
+        {(photo || video) && (
+          <Alert
+            type="muted"
+            title="Important"
+            sx={{
+              maxWidth: popupWidth,
+              maxHeight: `calc(${popupMaxHeight} - ${popupWidth})`,
+              mt: 2,
+            }}
+          >
+            <Text>
+              {video &&
+                `After recording, check in the preview that the address
+              is clearly readable, it's not mirrored and that the video complies
+              with the rest of the policy.`}
+              {photo &&
+                `Make sure to directly face the camera, that all your
+              facial features are clearly visible, and that the photo complies
+              with the rest of the policy.`}
+            </Text>
+          </Alert>
+        )}
         {loading && (
           <Box
             as={ReactLoadingSkeleton}
@@ -198,6 +248,7 @@ export default function Webcam({
             }}
             height="calc(80vh + 10px)"
             width="calc(80vh + 10px)"
+            onClick={(event) => event.preventDefault()}
           />
         )}
       </Box>
